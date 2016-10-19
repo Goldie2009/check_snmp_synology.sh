@@ -12,7 +12,7 @@
 # - Temperature Warning and Critical
 # - UPS information
 # 
-# Tested with DSM 6.0 and Synology RS814
+# Tested with DSM 6.0
 # 
 # inspired by
 #
@@ -143,8 +143,7 @@ if [ "$warning" -gt "$critical" ] ; then
     exit 1 
 fi
 
-#connect
-
+#connect and collect
 if [ "$hostname" = "" ] || ([ "$SNMPVersion" = "3" ] && [ "$SNMPUser" = "" ]) || ([ "$SNMPVersion" = "3" ] && [ "$SNMPPassword" = "" ]) ; then
 	fManual
 else
@@ -201,10 +200,6 @@ verboseOutput+="DSM Version:			$DSMVersion\n"
 verboseOutput+="System temperature:		 	$temperature°C\n"
 verboseOutput+="Number of disks:      $nbDisk\n"
 verboseOutput+="Number of RAID volumes:   $nbRAID\n"
-for i in `seq 1 $nbRAID`;
-	do
-		verboseOutput+=" ${RAIDName[$i]} status:${RAIDStatus[$i]} ${storagePercentUsedString[$i]}\n"
-	done
 
 #disk
 if [ "$option" == "disk" ]; then
@@ -213,21 +208,18 @@ if [ "$option" == "disk" ]; then
 			diskID[$i]=$(echo "$syno" | grep "$OID_diskID.$(($i-1)) " | cut -d "=" -f2)
 			diskModel[$i]=$(echo "$syno" | grep "$OID_diskModel.$(($i-1)) " | cut -d "=" -f2 )
 			diskStatus[$i]=$(echo "$syno" | grep "$OID_diskStatus.$(($i-1)) " | cut -d "=" -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
-
 			case ${diskStatus[$i]} in
-				"1")	diskStatus[$i]="Normal";		;;
-				"2")	diskStatus[$i]="Initialized";		;;
-				"3")	diskStatus[$i]="NotInitialized";	;;
-				"4")	diskStatus[$i]="SystemPartitionFailed";	exitcode=2; verboseOutput+=" problem with ${diskID[$i]} (model:${diskModel[$i]}) status:${diskStatus[$i]} temperature:${diskTemp[$i]} °C";;
-				"5")	diskStatus[$i]="Crashed";		exitcode=2;	verboseOutput+=" problem with ${diskID[$i]} (model:${diskModel[$i]}) status:${diskStatus[$i]} temperature:${diskTemp[$i]} °C";;
-			esac
+				"1")	diskStatus[$i]="Normal";		teaserOutput+="${diskID[$i]} Normal";;
+				"2")	diskStatus[$i]="Initialized";		teaserOutput+="${diskID[$i]} Inititialized";;
+				"3")	diskStatus[$i]="NotInitialized";	teaserOutput+="${diskID[$i]} Not initialized";;
+				"4")	diskStatus[$i]="SystemPartitionFailed";	exitcode=2; teaserOutput+="${diskID[$i]} status:${diskStatus[$i]}";;
+				"5")	diskStatus[$i]="Crashed";		exitcode=2;	teaserOutput+="${diskID[$i]} status:${diskStatus[$i]}";;
+			esac            
+            if [ "$nbDisk" -gt "$i" ] ; then
+            	teaserOutput+=", "
+            fi            
+            perfdata+="'${diskID[$i]}'=$exitcode;1;2;;"
 		done 
-        if [ "$exitcode" == 2 ] ; then
-        	teaserOutput+=" Disk is critical!"
-        fi
-        if [ "$exitcode" == 1 ] ; then
-        	teaserOutput+=" Disk is warning!"
-        fi
 fi
 
 # raid
@@ -258,64 +250,27 @@ if [ "$option" == "raid" ] ; then
             perfdata+="'${RAIDName[i]}'=${storagePercentUsed[$i]};$warning;$critical;;"
 		fi
         case ${RAIDStatus[$i]} in
-			"1")	RAIDStatus[$i]="Normal";				raidstatuscode=0;		teaserOutput+="RAID status ${RAIDName[$i]}: Normal, ";;
-			"2")	RAIDStatus[$i]="Repairing";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"3")	RAIDStatus[$i]="Migrating";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"4")	RAIDStatus[$i]="Expanding";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"5")	RAIDStatus[$i]="Deleting";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"6")	RAIDStatus[$i]="Creating";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"7")	RAIDStatus[$i]="RaidSyncing";			raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"8")	RAIDStatus[$i]="RaidParityChecking";	raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"9")	RAIDStatus[$i]="RaidAssembling";		raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"10")	RAIDStatus[$i]="Canceling";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"11")	RAIDStatus[$i]="Degrade";				exitcode=2;				teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
-			"12")	RAIDStatus[$i]="Crashed";				exitcode=2;				teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}, ";;
+			"1")	RAIDStatus[$i]="Normal";				raidstatuscode=0;		teaserOutput+="RAID status ${RAIDName[$i]}: Normal";;
+			"2")	RAIDStatus[$i]="Repairing";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"3")	RAIDStatus[$i]="Migrating";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"4")	RAIDStatus[$i]="Expanding";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"5")	RAIDStatus[$i]="Deleting";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"6")	RAIDStatus[$i]="Creating";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"7")	RAIDStatus[$i]="RaidSyncing";			raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"8")	RAIDStatus[$i]="RaidParityChecking";	raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"9")	RAIDStatus[$i]="RaidAssembling";		raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"10")	RAIDStatus[$i]="Canceling";				raidstatuscode=1;		teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"11")	RAIDStatus[$i]="Degrade";				exitcode=2;				teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
+			"12")	RAIDStatus[$i]="Crashed";				exitcode=2;				teaserOutput+="RAID status ${RAIDName[$i]}: ${RAIDStatus[$i]}";;
         esac
         if [ "$exitcode" != 2 ] && [ "raidstatuscode" == 1 ] ; then
         	exitcode=1
         fi
+        if [ "$nbRAID" -gt "$i" ] ; then
+            	teaserOutput+=", "
+            fi
     done
     perfdata+="'RAID status'=$raidstatuscode;1;2;;"
-fi
-
-#temperature
-if [ "$option" == "temperature" ] ; then
-	if [ "$temperature" -gt "$warning" ] ; then
-    	if [ "$temperature" -gt "$critical" ] ; then
-        	verboseOutput+="System temperature: $temperature °C (Critical) \n"
-	        exitcode=2
-		else
-			verboseOutput+="System temperature: $temperature °C (Warning) \n"
-	        exitcode=1
-		fi
-    fi
-	perfdata+="'System'=$temperature;$warning;$critical;;"
-    for i in `seq 1 $nbDisk`;
-	do
-    	diskID[$i]=$(echo "$syno" | grep "$OID_diskID.$(($i-1)) " | cut -d "=" -f2)
-		diskModel[$i]=$(echo "$syno" | grep "$OID_diskModel.$(($i-1)) " | cut -d "=" -f2 )
-		diskTemp[$i]=$(echo "$syno" | grep "$OID_diskTemp.$(($i-1)) " | cut -d "=" -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
-        if [ "${diskTemp[$i]}" -gt "$warning" ] ; then
-            if [ "${diskTemp[$i]}" -gt "$critical" ] ; then
-               	diskTemp[$i]="${diskTemp[$i]} "
-               	exitcode=2;
-            	verboseOutput+="${diskID[$i]} temperature: ${diskTemp[$i]} °C (Critical)\n"
-            else
-            	diskTemp[$i]="${diskTemp[$i]} "
-                if [ "$exitcode" != 2 ] ; then
-                	exitcode=1;
-                fi
-                verboseOutput+="${diskID[$i]} temperature: ${diskTemp[$i]} °C (Warning)\n"
-           	fi
-        fi
-		perfdata+=" '${diskID[$i]}'=${diskTemp[$i]};$warning;$critical;;"
-	done
-    if [ "$exitcode" == 2 ] ; then
-       	teaserOutput+=" Temperature is critical!"
-    fi
-    if [ "$exitcode" == 1 ] ; then
-       	teaserOutput+=" Temperature is warning!"
-    fi
 fi
 
 #status
@@ -335,7 +290,7 @@ if [ "$option" == "status" ] ; then
     fi
     # check power status
     if [ "$powerStatus" = "1" ] ; then
-    	verboseOutput+="Power status: Normal "
+    	verboseOutput+="Power status: Normal \n"
     else
        	exitcode=2
         teaserOutput+="Power status: Failed "
@@ -358,21 +313,63 @@ if [ "$option" == "status" ] ; then
         verboseOutput+="CPU fan status: Failed \n"
     fi
     if [ "$exitcode" = 0 ] ; then
-    	teaserOutput+="System state normal. "
+    	teaserOutput+="System state normal. \n"
     fi
     perfdata+="'Status'=$exitcode;1;2;;"
+fi
+
+#temperature
+if [ "$option" == "temperature" ] ; then
+	if [ "$temperature" -gt "$warning" ] ; then
+    	if [ "$temperature" -gt "$critical" ] ; then
+        	verboseOutput+="System temperature: $temperature °C (Critical), "
+	        exitcode=2
+		else
+			verboseOutput+="System temperature: $temperature °C (Warning), "
+	        exitcode=1
+		fi
+    else
+    	teaserOutput+="System temperature: $temperature °C, "
+    fi
+	perfdata+="'System'=$temperature;$warning;$critical;;"
+    for i in `seq 1 $nbDisk`;
+	do
+    	diskID[$i]=$(echo "$syno" | grep "$OID_diskID.$(($i-1)) " | cut -d "=" -f2)
+		diskModel[$i]=$(echo "$syno" | grep "$OID_diskModel.$(($i-1)) " | cut -d "=" -f2 )
+		diskTemp[$i]=$(echo "$syno" | grep "$OID_diskTemp.$(($i-1)) " | cut -d "=" -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
+        if [ "${diskTemp[$i]}" -gt "$warning" ] ; then
+            if [ "${diskTemp[$i]}" -gt "$critical" ] ; then
+               	diskTemp[$i]="${diskTemp[$i]} "
+               	exitcode=2;
+            	teaserOutput+="${diskID[$i]} temperature: ${diskTemp[$i]} °C (Critical), "
+            else
+            	diskTemp[$i]="${diskTemp[$i]} "
+                if [ "$exitcode" != 2 ] ; then
+                	exitcode=1;
+                fi
+                teaserOutput+="${diskID[$i]} temperature: ${diskTemp[$i]} °C (Warning), "
+           	fi
+        else
+        	teaserOutput+="${diskID[$i]} temperature: ${diskTemp[$i]} °C"
+            if [ "$nbDisk" -gt "$i" ] ; then
+            	teaserOutput+=", "
+            fi
+        fi
+		perfdata+=" '${diskID[$i]}'=${diskTemp[$i]};$warning;$critical;;"
+	done
 fi
 
 #update
 if [ "$option" == "update" ] ; then
 	DSMUpgradeAvailable=$(echo "$syno" | grep $OID_DSMUpgradeAvailable | cut -d "=" -f2 | sed 's/^[ \t]*//;s/[ \t]*$//')
     case $DSMUpgradeAvailable in
-		"1")	DSMUpgradeAvailable="Available";	exitcode=1;		teaserOutput+="DSM update available";;
-		"2")	DSMUpgradeAvailable="Unavailable";;
+		"1")	DSMUpgradeAvailable="Available";	exitcode=1;		teaserOutput+="DSM update available.";;
+		"2")	DSMUpgradeAvailable="Unavailable"	teaserOutput+="No DSM update available.";;
 		"3")	DSMUpgradeAvailable="Connecting";;					
-		"4")	DSMUpgradeAvailable="Disconnected";	exitcode=1;		teaserOutput+="DSM Update Disconnected";;
-		"5")	DSMUpgradeAvailable="Others";		exitcode=1;		teaserOutput+="Check DSM Update";;
+		"4")	DSMUpgradeAvailable="Disconnected";	exitcode=1;		teaserOutput+="DSM Update Disconnected.";;
+		"5")	DSMUpgradeAvailable="Others";		exitcode=1;		teaserOutput+="Check DSM Update.";;
     esac
+    perfdata+="'Update'=$exitcode;1;2;;"
 fi
 
 #ups
