@@ -1,0 +1,17 @@
+name: check_snmp_synology
+description: "file:///README.md"
+url: "https://github.com/Goldie2009/check_snmp_synology"
+tags: Monitoring Synology Plug-In
+vendor: 
+target: 
+type: Plugin
+license: gplv3
+releases: 
+  - 
+    name: 3.0
+    description: "3.0 Release"
+    files: 
+      - 
+        name: check_snmp_synology.sh
+        url: "file:///check_snmp_synology.sh"
+        description: ""
