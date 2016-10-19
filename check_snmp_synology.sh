@@ -12,7 +12,7 @@
 # - Temperature Warning and Critical
 # - UPS information
 # 
-# Tested with DSM 6.0
+# Tested with DSM 6.0 and Synology RS814
 # 
 # inspired by
 #
